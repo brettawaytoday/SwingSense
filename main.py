@@ -1,12 +1,16 @@
 import utime
 import math
 import mpu6050
-from machine import Pin, SPI, ADC
+from machine import Pin, SPI, ADC, UART
+import json
 
 #Accelerometer
 mpu = mpu6050.MPU6050()
-mpu.setSampleRate(200)
+mpu.setSampleRate(500)
 mpu.setGResolution(2)
+
+counter = 0
+intensity = 0.0
 
 def averageMPU(count, timing_ms):
     gx = 0
@@ -34,12 +38,8 @@ def averageMPU(count, timing_ms):
         
     return gx/count, gy/count, gz/count, grx/count, gry/count, grz/count
 
-
-#UV Sensor
-board_v = ADC(28)
-uv_out = ADC(26)
-
-while True:
+def getuv():
+    global intensity
     voltage = board_v.read_u16()
     
     light = uv_out.read_u16() # 65535
@@ -53,8 +53,23 @@ while True:
     out_max = 15.0
     
     intensity = (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+
+#UV Sensor
+board_v = ADC(28)
+uv_out = ADC(26)
+getuv()
+
+#UART - Serial communication
+uart = UART(1,115200)
+
+while True:
+    counter += 1
     
-#     print(intensity)
+    if counter > 50:
+        getuv()
+        counter = 0
+
     
     gx, gy, gz, grx, gry, grz = averageMPU(20, 5)
     
@@ -65,8 +80,5 @@ while True:
     angleX =  rad2degree * math.asin(gx / vdim)
     angleY =  rad2degree * math.asin(gy / vdim)
     angleZ =  rad2degree * math.asin(gz / vdim)
- 
-    print("X: " + str(angleX))
-#     print("Y: " + str(angleY))
-#     print("Z: " + str(angleZ))
-#     print("Xrot: " + str(grx)) 
+    
+    uart.write("{},{},{},{},\n".format(angleX, angleY, angleZ, intensity))
